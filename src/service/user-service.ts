@@ -1,20 +1,38 @@
-import { PrismaClient } from "@prisma/client";
-import { RegisterUserRequest, UserResponse } from "../model/user-model";
+import { RegisterUserRequest, toUserResponse, UserResponse } from "../model/user-model";
 import { UserValidation } from "../validation/user-validation";
+import { prismaClient } from "../application/database";
+import { HTTPException } from "hono/http-exception";
 
 export class UserService {
-    static async (request: RegisterUserRequest): Promise<UserResponse> {
-        //Validasi request
-        UserValidation.REGISTER.parse(request)
-        // cek apakah data di database atau tidak
+  static async register(request: RegisterUserRequest): Promise<UserResponse> {
+    request = UserValidation.REGISTER.parse(request);
 
-        PrismaClient.user.count({
-            
-        })
-        // hashing password menggunakan bcrypt
+    //Validasi request
+    const totalUsernameWithUsername = await prismaClient.user.count({
+      where: {
+        username: request.username,
+      },
+    });
 
-        // save database
+    // cek apakah data di database atau tidak
 
-        //return response
+    if (totalUsernameWithUsername != 0) {
+      throw new HTTPException(400, {
+        message: "Username already exists",
+      });
     }
+
+    // hashing password menggunakan bcrypt
+    request.password = await Bun.password.hash(request.password, {
+      algorithm: "bcrypt",
+      cost: 10,
+    });
+
+    // save database
+
+    const User = await prismaClient.user.create({
+        data: request 
+    })
+   return toUserResponse(User); 
+  }
 }
